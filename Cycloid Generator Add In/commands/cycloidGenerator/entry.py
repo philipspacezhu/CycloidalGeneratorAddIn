@@ -2,6 +2,7 @@ import adsk.core
 import os
 from ...lib import fusionAddInUtils as futil
 from ... import config
+import traceback
 app = adsk.core.Application.get()
 ui = app.userInterface
 
@@ -51,7 +52,6 @@ def start():
     # Specify if the command is promoted to the main toolbar. 
     control.isPromoted = IS_PROMOTED
 
-
 # Executed when add-in is stopped.
 def stop():
     # Get the various UI elements for this command
@@ -67,6 +67,9 @@ def stop():
     # Delete the command definition
     if command_definition:
         command_definition.deleteMe()
+
+
+
 
 
 # Function that is called when a user clicks the corresponding button in the UI.
@@ -89,10 +92,22 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     defaultLengthUnits = app.activeProduct.unitsManager.defaultLengthUnits
     default_value = adsk.core.ValueInput.createByString('50')
     inputs.addValueInput('pin_circle_radius', 'Pin Cricle Radius', defaultLengthUnits, default_value)
-
     # Create an integer slider value input.
     inputs.addIntegerSpinnerCommandInput('pin_count', 'Number of Roller Pins', 0, 20, 1, 5)
-    
+
+    app = adsk.core.Application.get()
+    ui = app.userInterface
+
+    doc = app.documents.add(adsk.core.DocumentTypes.FusionDesignDocumentType)
+    design = app.activeProduct
+
+    # Get the root component of the active design.
+    rootComp = design.rootComponent
+
+    # Create a new sketch on the xy plane.
+    sketches = rootComp.sketches
+    xyPlane = rootComp.xYConstructionPlane
+    sketch = sketches.add(xyPlane)
     
 
     # TODO Connect to the events that are needed by this command.
