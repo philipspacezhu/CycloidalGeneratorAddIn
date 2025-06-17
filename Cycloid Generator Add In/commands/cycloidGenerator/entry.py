@@ -92,24 +92,15 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     defaultLengthUnits = app.activeProduct.unitsManager.defaultLengthUnits
     default_value = adsk.core.ValueInput.createByString('50')
     inputs.addValueInput('pin_circle_radius', 'Pin Cricle Radius', defaultLengthUnits, default_value)
+
+    # Create a value input field and set the default using 1 unit of the default length unit.
+    defaultLengthUnits = app.activeProduct.unitsManager.defaultLengthUnits
+    default_value = adsk.core.ValueInput.createByString('5')
+    inputs.addValueInput('extent_length', 'Extrude Extent Length', defaultLengthUnits, default_value)  
+
     # Create an integer slider value input.
     inputs.addIntegerSpinnerCommandInput('pin_count', 'Number of Roller Pins', 0, 20, 1, 5)
-
-    app = adsk.core.Application.get()
-    ui = app.userInterface
-
-    doc = app.documents.add(adsk.core.DocumentTypes.FusionDesignDocumentType)
-    design = app.activeProduct
-
-    # Get the root component of the active design.
-    rootComp = design.rootComponent
-
-    # Create a new sketch on the xy plane.
-    sketches = rootComp.sketches
-    xyPlane = rootComp.xYConstructionPlane
-    sketch = sketches.add(xyPlane)
     
-
     # TODO Connect to the events that are needed by this command.
     futil.add_handler(args.command.execute, command_execute, local_handlers=local_handlers)
     futil.add_handler(args.command.inputChanged, command_input_changed, local_handlers=local_handlers)
@@ -128,14 +119,72 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     # Get a reference to your command's inputs.
     inputs = args.command.commandInputs
-    text_box: adsk.core.TextBoxCommandInput = inputs.itemById('text_box')
-    value_input: adsk.core.ValueCommandInput = inputs.itemById('value_input')
+    # Access the value of 'pin_count' (integer spinner input)
+    pin_radius_input = inputs.itemById('pin_radius')
+    pin_radius = pin_radius_input.value  # This will be an float value
 
-    # Do something interesting
-    text = text_box.text
-    expression = value_input.expression
-    msg = f'Your text: {text}<br>Your value: {expression}'
-    ui.messageBox(msg)
+    pin_circle_radius_input = inputs.itemById('pin_circle_radius')
+    pin_circle_radius = pin_circle_radius_input.value  # This will be an float value
+
+    pin_count_input = inputs.itemById('pin_count')
+    pin_count = pin_count_input.value  # This will be an integer
+
+    # Access the value of 'extent_length' (value input)
+    extent_length_input = inputs.itemById('extent_length')
+    extent_length = extent_length_input.value  # This will be a float value
+
+    # === Place your sketch creation code here ===
+    # Example: create a new sketch, draw circles, etc.
+    doc = app.activeDocument
+    design = app.activeProduct
+    rootComp = design.rootComponent
+    # Create a new sketch on the XZ plane of the root component.
+    sketches = rootComp.sketches
+    xzPlane = rootComp.xZConstructionPlane
+    sketch = sketches.add(xzPlane)
+    sketch.sketchCurves.sketchCircles.addByCenterRadius(adsk.core.Point3D.create(pin_circle_radius,0,0), pin_radius)
+
+    # Get the profile defined by the circle.
+    prof = sketch.profiles.item(0)
+    # Create an extrusion input
+    extrudes = rootComp.features.extrudeFeatures
+    extInput = extrudes.createInput(prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+
+    # Define that the extent is a distance extent of extent_length cm.
+    distance = adsk.core.ValueInput.createByReal(extent_length)
+    extInput.setDistanceExtent(False, distance)
+
+    # Create the extrusion.
+    ext = extrudes.add(extInput)
+    
+    # Get the body created by extrusion
+    body = rootComp.bRepBodies.item(0)
+    
+    # Create input entities for circular pattern
+    inputEntites = adsk.core.ObjectCollection.create()
+    inputEntites.add(body)
+    
+    # Get Y axis for circular pattern
+    yAxis = rootComp.yConstructionAxis
+    
+    # Create the input for circular pattern
+    circularFeats = rootComp.features.circularPatternFeatures
+
+    circularFeatInput = circularFeats.createInput(inputEntites, yAxis)
+    
+    # Set the quantity of the elements
+    circularFeatInput.quantity = adsk.core.ValueInput.createByReal(pin_count)
+    
+    # Set the angle of the circular pattern
+    circularFeatInput.totalAngle = adsk.core.ValueInput.createByString('360 deg')
+    
+    # Set symmetry of the circular pattern
+    circularFeatInput.isSymmetric = True
+    
+    # Create the circular pattern
+    circularFeat = circularFeats.add(circularFeatInput)
+
+
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
