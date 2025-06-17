@@ -143,6 +143,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
     xzPlane = rootComp.xZConstructionPlane
     sketch = sketches.add(xzPlane)
     sketch.sketchCurves.sketchCircles.addByCenterRadius(adsk.core.Point3D.create(pin_circle_radius,0,0), pin_radius)
+    
 
     # Get the profile defined by the circle.
     prof = sketch.profiles.item(0)
