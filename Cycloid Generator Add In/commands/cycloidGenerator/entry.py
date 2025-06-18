@@ -3,6 +3,19 @@ import os
 from ...lib import fusionAddInUtils as futil
 from ... import config
 import traceback
+import math
+
+def deg_range(start, stop, step):
+    r = start
+    while r <= stop:
+        yield r
+        r += step
+
+def cos(angle):
+    return math.cos(math.radians(angle))
+def sin(angle):
+    return math.sin(math.radians(angle))
+ 
 app = adsk.core.Application.get()
 ui = app.userInterface
 
@@ -68,10 +81,6 @@ def stop():
     if command_definition:
         command_definition.deleteMe()
 
-
-
-
-
 # Function that is called when a user clicks the corresponding button in the UI.
 # This defines the contents of the command dialog and connects to the command related events.
 def command_created(args: adsk.core.CommandCreatedEventArgs):
@@ -82,26 +91,29 @@ def command_created(args: adsk.core.CommandCreatedEventArgs):
     inputs = args.command.commandInputs
 
     # TODO Define the dialog for your command by adding different inputs to the command.
-
-    # Create a value input field and set the default using 1 unit of the default length unit.
+    # Set the default length units for the command inputs, usually mm.
     defaultLengthUnits = app.activeProduct.unitsManager.defaultLengthUnits
-    default_value = adsk.core.ValueInput.createByString('2.5')
+
+    # Number of Roller Pins Input field, default 11, Reduction ratio = pin_count - 1.
+    inputs.addIntegerSpinnerCommandInput('pin_count', 'Number of Roller Pins', 0, 101, 1, 11)
+
+    # Cycloidal Disk Radius value input field, default 50
+    default_value = adsk.core.ValueInput.createByString('50')
+    inputs.addValueInput('cycloid_radius', 'Cycloid Disc Radius', defaultLengthUnits, default_value)
+    
+    # Roller Pin Radius Input field, default 5 
+    default_value = adsk.core.ValueInput.createByString('5')
     inputs.addValueInput('pin_radius', 'Pin Radius', defaultLengthUnits, default_value)
 
-    # Create a value input field and set the default using 1 unit of the default length unit.
-    defaultLengthUnits = app.activeProduct.unitsManager.defaultLengthUnits
-    default_value = adsk.core.ValueInput.createByString('50')
-    inputs.addValueInput('pin_circle_radius', 'Pin Cricle Radius', defaultLengthUnits, default_value)
-
-    # Create a value input field and set the default using 1 unit of the default length unit.
-    defaultLengthUnits = app.activeProduct.unitsManager.defaultLengthUnits
-    default_value = adsk.core.ValueInput.createByString('5')
-    inputs.addValueInput('extent_length', 'Extrude Extent Length', defaultLengthUnits, default_value)  
-
-    # Create an integer slider value input.
-    inputs.addIntegerSpinnerCommandInput('pin_count', 'Number of Roller Pins', 0, 20, 1, 5)
+    # Eccentricity value input field, default 2.5, need to find way to make this half of the pin radius.
+    default_value = adsk.core.ValueInput.createByString('2.5')
+    inputs.addValueInput('eccentricity', 'Eccentricity = Roller Pin Radius / 2', defaultLengthUnits, default_value)
     
-    # TODO Connect to the events that are needed by this command.
+    # # Extrustion extent length input field, default 5.
+    # default_value = adsk.core.ValueInput.createByString('5')
+    # inputs.addValueInput('extent_length', 'Extrude Extent Length', defaultLengthUnits, default_value)
+
+    # Connect to the events that are needed by this command.
     futil.add_handler(args.command.execute, command_execute, local_handlers=local_handlers)
     futil.add_handler(args.command.inputChanged, command_input_changed, local_handlers=local_handlers)
     futil.add_handler(args.command.executePreview, command_preview, local_handlers=local_handlers)
@@ -116,25 +128,30 @@ def command_execute(args: adsk.core.CommandEventArgs):
     futil.log(f'{CMD_NAME} Command Execute Event')
 
     # TODO ******************************** Your code here ********************************
-
+ 
     # Get a reference to your command's inputs.
     inputs = args.command.commandInputs
+
     # Access the value of 'pin_count' (integer spinner input)
     pin_radius_input = inputs.itemById('pin_radius')
-    pin_radius = pin_radius_input.value  # This will be an float value
+    pin_radius = pin_radius_input.value
 
-    pin_circle_radius_input = inputs.itemById('pin_circle_radius')
-    pin_circle_radius = pin_circle_radius_input.value  # This will be an float value
+    cycloid_radius_input = inputs.itemById('cycloid_radius')
+    cycloid_radius = cycloid_radius_input.value
 
+    # Access the value of 'cycloid_radius' (value input)
     pin_count_input = inputs.itemById('pin_count')
-    pin_count = pin_count_input.value  # This will be an integer
+    pin_count = pin_count_input.value
 
-    # Access the value of 'extent_length' (value input)
-    extent_length_input = inputs.itemById('extent_length')
-    extent_length = extent_length_input.value  # This will be a float value
+    # Access the value of 'pin_radius' (value input)
+    eccentricity_input = inputs.itemById('eccentricity')
+    eccentricity = eccentricity_input.value
+
+    # # Access the value of 'extent_length' (value input)
+    # extent_length_input = inputs.itemById('extent_length')
+    # extent_length = extent_length_input.value
 
     # === Place your sketch creation code here ===
-    # Example: create a new sketch, draw circles, etc.
     doc = app.activeDocument
     design = app.activeProduct
     rootComp = design.rootComponent
@@ -142,48 +159,58 @@ def command_execute(args: adsk.core.CommandEventArgs):
     sketches = rootComp.sketches
     xzPlane = rootComp.xZConstructionPlane
     sketch = sketches.add(xzPlane)
-    sketch.sketchCurves.sketchCircles.addByCenterRadius(adsk.core.Point3D.create(pin_circle_radius,0,0), pin_radius)
-    
 
-    # Get the profile defined by the circle.
-    prof = sketch.profiles.item(0)
-    # Create an extrusion input
-    extrudes = rootComp.features.extrudeFeatures
-    extInput = extrudes.createInput(prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    # TODO *** Add your code to create the cycloid drive here. ***
+    #Using some code from RoTechnic's design of a cycloidal drive in Python and Fusion 360 https://github.com/roTechnic/CycloidalDesign
+    rolling_circle_radius = cycloid_radius / pin_count
+    reduction_ratio = pin_count - 1
+    cycloid_base_radius = rolling_circle_radius * reduction_ratio
 
-    # Define that the extent is a distance extent of extent_length cm.
-    distance = adsk.core.ValueInput.createByReal(extent_length)
-    extInput.setDistanceExtent(False, distance)
+    last_point = None
+    line = None
 
-    # Create the extrusion.
-    ext = extrudes.add(extInput)
-    
-    # Get the body created by extrusion
-    body = rootComp.bRepBodies.item(0)
-    
-    # Create input entities for circular pattern
-    inputEntites = adsk.core.ObjectCollection.create()
-    inputEntites.add(body)
-    
-    # Get Y axis for circular pattern
-    yAxis = rootComp.yConstructionAxis
-    
-    # Create the input for circular pattern
-    circularFeats = rootComp.features.circularPatternFeatures
+    lines = []
 
-    circularFeatInput = circularFeats.createInput(inputEntites, yAxis)
+    for angle in deg_range(0, 360, 1):
+        x = (cycloid_base_radius + rolling_circle_radius) * cos(angle)
+        y = (cycloid_base_radius + rolling_circle_radius) * sin(angle)
+ 
+        point_x = x + (rolling_circle_radius - eccentricity) * cos(pin_count*angle)
+        point_y = y + (rolling_circle_radius - eccentricity) * sin(pin_count*angle)
+
+        if angle == 0:
+            # Create the first point
+            last_point = adsk.core.Point3D.create(point_x, point_y, 0)
+        else:
+            # Create a line from the last point to the current point
+            line = sketch.sketchCurves.sketchLines.addByTwoPoints(last_point, adsk.core.Point3D.create(point_x, point_y, 0))
+            last_point = line.endSketchPoint
+            lines.append(line)
+
+        # Watch the curve get drawn in the sketch.
+        app.activeViewport.refresh()
+    curves = sketch.findConnectedCurves(lines[0])
+            
+    # Create the offset for the roller pins.
+    dirPoint = adsk.core.Point3D.create(0, 0, 0)
+    offsetCurves = sketch.offset(curves, dirPoint, pin_radius)
+
+    # # Get the profile defined by the cycloidal disk.
+    # prof = sketch.profiles.item(1)
+    # # Create an extrusion input
+    # extrudes = rootComp.features.extrudeFeatures
+    # extInput = extrudes.createInput(prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+
+    # # Define that the extent is a distance extent of extent_length cm.
+    # distance = adsk.core.ValueInput.createByReal(extent_length)
+    # extInput.setDistanceExtent(False, distance)
+
+    # # Create the extrusion.
+    # ext = extrudes.add(extInput)
     
-    # Set the quantity of the elements
-    circularFeatInput.quantity = adsk.core.ValueInput.createByReal(pin_count)
-    
-    # Set the angle of the circular pattern
-    circularFeatInput.totalAngle = adsk.core.ValueInput.createByString('360 deg')
-    
-    # Set symmetry of the circular pattern
-    circularFeatInput.isSymmetric = True
-    
-    # Create the circular pattern
-    circularFeat = circularFeats.add(circularFeatInput)
+    # # Get the body created by extrusion
+    # body = rootComp.bRepBodies.item(0)
+
 
 
 
