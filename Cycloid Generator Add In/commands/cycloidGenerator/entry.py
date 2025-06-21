@@ -224,6 +224,11 @@ def command_execute(args: adsk.core.CommandEventArgs):
     roller_plate_sketch = roller_plate_sketches.add(rootComp.xZConstructionPlane)
     roller_plate_circle = roller_plate_sketch.sketchCurves.sketchCircles.addByCenterRadius(origin_point, cycloid_radius + pin_radius)
 
+    # Create a sketch for the throughhole in the centre of the roller disk.
+    throughhole_sketches = rootComp.sketches
+    throughhole_sketch = throughhole_sketches.add(rootComp.xZConstructionPlane)
+    throughhole_circle = throughhole_sketch.sketchCurves.sketchCircles.addByCenterRadius(origin_point, pin_radius + 0.2)
+
     # Create a sketch for the output  roller pins
     output_roller_sketches = rootComp.sketches
     output_roller_sketch = output_roller_sketches.add(rootComp.xZConstructionPlane)
@@ -321,6 +326,16 @@ def command_execute(args: adsk.core.CommandEventArgs):
     circularFeatInput.isSymmetric = True
     # Create the circular pattern 
     circularFeat = circularFeats.add(circularFeatInput)
+
+    # Cut the hole for the throughhole in the roller plate.
+    throughhole_prof = throughhole_sketch.profiles.item(0)
+    throughhole_extrudes = rootComp.features.extrudeFeatures
+    cutInput = throughhole_extrudes.createInput(throughhole_prof, adsk.fusion.FeatureOperations.CutFeatureOperation)
+    # Define that the extent is a distance extent of user provided disk_extent_length.
+    distance = adsk.core.ValueInput.createByReal(-disk_extent_length)
+    cutInput.setDistanceExtent(False, distance)
+    # Create the cut.
+    cut = throughhole_extrudes.add(cutInput)
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
