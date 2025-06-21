@@ -178,7 +178,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
 
     lines = []
 
-    for angle in deg_range(0, 360, 1):
+    for angle in deg_range(0, 360, 5):
         x = (cycloid_base_radius + rolling_circle_radius) * cos(angle)
         y = (cycloid_base_radius + rolling_circle_radius) * sin(angle)
  
@@ -200,7 +200,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
             
     # # Create the offset for the roller pins.
     sketch_direction_point = adsk.core.Point3D.create(0, 0, 0)
-    offset_curves = cycloid_sketch.offset(curves, sketch_direction_point, pin_radius)
+    offset_curves = cycloid_sketch.offset(curves, sketch_direction_point, pin_radius + 0.4)
 
     # Create a sketch for the eccentric shaft in the disk.
     eccentric_shaf_sketches = rootComp.sketches
@@ -213,25 +213,53 @@ def command_execute(args: adsk.core.CommandEventArgs):
     roller_sketches = rootComp.sketches
     roller_sketch = roller_sketches.add(rootComp.xZConstructionPlane)
     roller_circles = roller_sketch.sketchCurves.sketchCircles
-    roller_pin_center = adsk.core.Point3D.create(cycloid_radius + eccentricity, 0, 0) 
+    roller_pin_center = adsk.core.Point3D.create(cycloid_radius, 0, 0) 
     roller_pin_circle = roller_circles.addByCenterRadius(roller_pin_center, pin_radius)
 
     # Create a sketch for the roller pin plate.
     origin_point = adsk.core.Point3D.create(0, 0, 0)
     roller_plate_sketches = rootComp.sketches
     roller_plate_sketch = roller_plate_sketches.add(rootComp.xZConstructionPlane)
-    roller_plate_circle = roller_plate_sketch.sketchCurves.sketchCircles.addByCenterRadius(origin_point, cycloid_radius + eccentricity + pin_radius)
+    roller_plate_circle = roller_plate_sketch.sketchCurves.sketchCircles.addByCenterRadius(origin_point, cycloid_radius + pin_radius)
+
+    # Create a sketch for the output  roller pins
+    output_roller_sketches = rootComp.sketches
+    output_roller_sketch = output_roller_sketches.add(rootComp.xZConstructionPlane)
+    output_roller_circles = output_roller_sketch.sketchCurves.sketchCircles
+    output_roller_center = adsk.core.Point3D.create(cycloid_radius / 2, 0, 0)
+    output_roller_circle = output_roller_circles.addByCenterRadius(output_roller_center, pin_radius)
 
     # Extrude the cycloidal disk based on user provided disk_extent_length.
     cycloid_prof = cycloid_sketch.profiles.item(1)
     # Create an extrusion input
     cycloid_extrudes = rootComp.features.extrudeFeatures
     extInput = cycloid_extrudes.createInput(cycloid_prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-    # Define that the extent is a distance extent of 5 cm.
+    # Define that the extent is a distance extent of disk extent length.
     distance = adsk.core.ValueInput.createByReal(disk_extent_length)
     extInput.setDistanceExtent(False, distance)
     # Create the extrusion.
     ext = cycloid_extrudes.add(extInput)
+
+    #Cut the hole for the eccentric shaft in the cycloidal disk.
+    eccentric_prof = eccentric_shaft_sketch.profiles.item(0)
+    eccentric_shaf_extrudes = rootComp.features.extrudeFeatures
+    cutInput = eccentric_shaf_extrudes.createInput(eccentric_prof, adsk.fusion.FeatureOperations.CutFeatureOperation)
+    # Define that the extent is a distance extent of user provided disk_extent_length.
+    distance = adsk.core.ValueInput.createByReal(-disk_extent_length)
+    cutInput.setDistanceExtent(False, distance)
+    # Create the extrusion.
+    ext = eccentric_shaf_extrudes.add(cutInput)
+
+    # Extrude roller plate under roller pin ring.
+    roller_plate_prof = roller_plate_sketch.profiles.item(0)
+    # # Create an extrusion input
+    roller_plate_extrudes = rootComp.features.extrudeFeatures 
+    extInput = roller_plate_extrudes.createInput(roller_plate_prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
+    # Define that the extent is a distance extent same as the disk extent length.
+    distance = adsk.core.ValueInput.createByReal(-disk_extent_length)
+    extInput.setDistanceExtent(False, distance)
+    # # Create the extrusion.
+    ext = roller_plate_extrudes.add(extInput)
 
     #Extrude user provided pin_count # of roller pins 360 deg around the cycloidal disk.
     rollers_prof = roller_sketch.profiles.item(0)
@@ -244,7 +272,7 @@ def command_execute(args: adsk.core.CommandEventArgs):
     # Create the extrusion.
     ext = roller_extrudes.add(extInput)
     # Get the body created by extrusion
-    roller_body = rootComp.bRepBodies.item(1)
+    roller_body = rootComp.bRepBodies.item(2)
     # Create input entities for circular pattern
     inputEntites = adsk.core.ObjectCollection.create()
     inputEntites.add(roller_body)
@@ -261,17 +289,6 @@ def command_execute(args: adsk.core.CommandEventArgs):
     circularFeatInput.isSymmetric = True
     # Create the circular pattern 
     circularFeat = circularFeats.add(circularFeatInput)
-
-    # Extrude roller plate under roller pin ring.
-    roller_plate_prof = roller_plate_sketch.profiles.item(0)
-    # # Create an extrusion input
-    roller_plate_extrudes = rootComp.features.extrudeFeatures
-    extInput = roller_plate_extrudes.createInput(roller_plate_prof, adsk.fusion.FeatureOperations.NewBodyFeatureOperation)
-    # Define that the extent is a distance extent same as the disk extent length.
-    distance = adsk.core.ValueInput.createByReal(-disk_extent_length)
-    extInput.setDistanceExtent(False, distance)
-    # # Create the extrusion.
-    ext = roller_plate_extrudes.add(extInput)
 
 
 # This event handler is called when the command needs to compute a new preview in the graphics window.
